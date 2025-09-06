@@ -1,6 +1,4 @@
-// Realtime whiteboard server (Node + Express + ws)
-// Serves /ws (WebSocket). Keeps per-room history in memory and autosaves to ./export/<room>.json
-
+// Realtime whiteboard server (Node + Express + ws), with page sync
 import express from 'express';
 import http from 'http';
 import path from 'path';
@@ -16,12 +14,10 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 
 const EXPORT_DIR = path.join(__dirname, 'export');
-const rooms = new Map(); // roomId -> { history: [], lastSave: 0 }
+const rooms = new Map(); // roomId -> { history: [], pageCount: number, lastSave: number }
 
-// Simple health route (helpful for Render)
 app.get('/healthz', (_, res) => res.send('ok'));
 
-// Upgrade HTTP -> WS
 server.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (url.pathname !== '/ws') { socket.destroy(); return; }
@@ -32,14 +28,13 @@ server.on('upgrade', (req, socket, head) => {
   });
 });
 
-// WebSocket handler
 wss.on('connection', async (ws) => {
   const roomId = ws._roomId;
-  if (!rooms.has(roomId)) rooms.set(roomId, { history: [], lastSave: 0 });
-  await ensureRoomLoaded(roomId); // lazy-load history if exists
+  if (!rooms.has(roomId)) rooms.set(roomId, { history: [], pageCount: 1, lastSave: 0 });
+  await ensureRoomLoaded(roomId);
 
   const room = rooms.get(roomId);
-  ws.send(JSON.stringify({ type: 'hello', history: room.history }));
+  ws.send(JSON.stringify({ type: 'hello', pageCount: room.pageCount, history: room.history }));
 
   ws.on('message', async (data) => {
     try{
@@ -48,8 +43,17 @@ wss.on('connection', async (ws) => {
       if (msg.type === 'seg'){
         const evt = normalizeSeg(roomId, msg);
         room.history.push(evt);
-        broadcastRoom(roomId, evt, ws);
+        room.pageCount = Math.max(room.pageCount, (evt.page|0) + 1);
+        broadcast(roomId, evt, ws);
         maybeSaveRoom(roomId);
+      } else if (msg.type === 'pageinfo'){
+        const count = Number(msg.count) || 1;
+        if (count > room.pageCount){
+          room.pageCount = count;
+          const info = { type: 'pageinfo', room: roomId, count: room.pageCount, ts: Date.now() };
+          broadcast(roomId, info, null);
+          maybeSaveRoom(roomId);
+        }
       }
     }catch(e){ console.error('Bad message:', e); }
   });
@@ -73,15 +77,16 @@ function clampPt(pt){
   if (!pt || typeof pt.x !== 'number' || typeof pt.y !== 'number') return { x:0, y:0 };
   return { x: Math.max(0, Math.min(1, pt.x)), y: Math.max(0, Math.min(1, pt.y)) };
 }
-function broadcastRoom(roomId, msg, exceptWs){
+function broadcast(roomId, msg, exceptWs){
   const payload = JSON.stringify(msg);
   for (const client of wss.clients){
     if (client.readyState !== 1) continue;
     if (client._roomId !== roomId) continue;
-    if (client === exceptWs) continue;
+    if (exceptWs && client === exceptWs) continue;
     client.send(payload);
   }
 }
+
 async function ensureRoomLoaded(roomId){
   const room = rooms.get(roomId);
   const file = path.join(EXPORT_DIR, `${safe(roomId)}.json`);
@@ -91,18 +96,24 @@ async function ensureRoomLoaded(roomId){
       const buf = await fs.readFile(file);
       const saved = JSON.parse(buf.toString());
       if (Array.isArray(saved.history)) room.history = saved.history;
+      if (Number.isInteger(saved.pageCount)) room.pageCount = Math.max(1, saved.pageCount);
     }
-  }catch{ /* fine if file missing */ }
+  }catch{ /* ok if missing */ }
 }
 async function maybeSaveRoom(roomId){
   const now = Date.now();
   const room = rooms.get(roomId);
   if (!room) return;
-  if (now - room.lastSave < 2000) return; // debounce: max every 2s
+  if (now - room.lastSave < 2000) return;
   room.lastSave = now;
 
   const file = path.join(EXPORT_DIR, `${safe(roomId)}.json`);
-  const data = JSON.stringify({ room: roomId, savedAt: new Date().toISOString(), history: room.history });
+  const data = JSON.stringify({
+    room: roomId,
+    pageCount: room.pageCount,
+    savedAt: new Date().toISOString(),
+    history: room.history
+  });
   try{
     await fs.mkdir(EXPORT_DIR, { recursive: true });
     await fs.writeFile(file, data);
@@ -113,5 +124,4 @@ function safe(s){ return String(s).replace(/[^a-z0-9_\-]/gi, '_'); }
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`WS server on :${PORT}  (health: /healthz)`);
-  console.log(`Remember to set docs/config.js -> window.WS_BASE to your backend URL.`);
 });
