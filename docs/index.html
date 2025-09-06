@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Realtime A5 Whiteboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <!-- Canvas stage with reserved space for bottom toolbar -->
+  <main class="stage" aria-live="polite">
+    <div id="pageStage" class="page-stage"></div>
+  </main>
+
+  <!-- Bottom toolbar -->
+  <div id="mobileDock" class="mobile-dock" aria-label="Drawing controls">
+    <button id="dockPen" class="dock-btn" title="Pen">✏️</button>
+    <button id="dockEraser" class="dock-btn" title="Eraser">🩹</button>
+
+    <button id="dockSizeMinus" class="dock-btn" title="Brush smaller">−</button>
+    <span id="dockSizeLabel" class="dock-label" aria-live="polite">8px</span>
+    <button id="dockSizePlus" class="dock-btn" title="Brush larger">＋</button>
+
+    <label class="dock-color" title="Pick colour">
+      <input id="dockColor" type="color" value="#111111" aria-label="Pick colour" />
+    </label>
+
+    <!-- Page label (we keep single page now; easy to extend later) -->
+    <span id="dockPageLabel" class="dock-label">1/1</span>
+  </div>
+
+  <!-- Connection status -->
+  <div id="netIndicator" class="net-indicator" title="Connection status">⏳</div>
+
+  <script src="./config.js"></script>
+  <script src="./script.js"></script>
+</body>
+</html>
