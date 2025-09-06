@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <!-- Canvas stage with reserved space for bottom toolbar -->
   <main class="stage" aria-live="polite">
     <div id="pageStage" class="page-stage"></div>
   </main>
@@ -25,11 +24,13 @@
       <input id="dockColor" type="color" value="#111111" aria-label="Pick colour" />
     </label>
 
-    <!-- Page label (we keep single page now; easy to extend later) -->
-    <span id="dockPageLabel" class="dock-label">1/1</span>
+    <!-- Page controls (back!) -->
+    <button id="dockPrev" class="dock-btn" title="Prev page">◀︎</button>
+    <span id="dockPageLabel" class="dock-label" aria-live="polite">1/1</span>
+    <button id="dockNext" class="dock-btn" title="Next page">▶︎</button>
+    <button id="dockAddPage" class="dock-btn" title="Add page">➕</button>
   </div>
 
-  <!-- Connection status -->
   <div id="netIndicator" class="net-indicator" title="Connection status">⏳</div>
 
   <script src="./config.js"></script>
